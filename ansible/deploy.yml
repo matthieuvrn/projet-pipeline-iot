@@ -6,7 +6,7 @@
     app_dir: /home/adminuser/iot-sensors-api
     api_port: 3000
     node_version: "16.x"
-    github_repo: "https://github.com/VOTRE_NOM_UTILISATEUR/projet-pipeline-iot.git"
+    github_repo: "https://github.com/matthieuvrn/projet-pipeline-iot.git"
     repo_branch: "main"
 
   tasks:
@@ -26,8 +26,6 @@
     - name: Install Node.js repository
       shell: |
         curl -fsSL https://deb.nodesource.com/setup_{{ node_version }} | sudo -E bash -
-      args:
-        warn: false
 
     - name: Install Node.js
       apt:
