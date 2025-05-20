@@ -23,7 +23,7 @@ jobs:
     - name: Install dependencies
       run: |
         cd api
-        npm ci
+        npm install
         
     - name: Set up Python
       uses: actions/setup-python@v2
