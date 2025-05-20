@@ -55,5 +55,13 @@ jobs:
     
     - name: Run deployment script
       run: |
-        chmod +x ./release.sh
-        ./release.sh ${GITHUB_REF#refs/tags/} --force
+        # Créer un script de déploiement simplifié pour CI
+        cat > deploy-ci.sh << 'EOF'
+        #!/bin/bash
+        set -e
+        echo "🔄 Déploiement avec Ansible..."
+        ansible-playbook -i ansible/inventory.ini ansible/deploy.yml
+        echo "✅ Déploiement terminé avec succès !"
+        EOF
+        chmod +x deploy-ci.sh
+        ./deploy-ci.sh
