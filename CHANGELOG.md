@@ -1,3 +1,3 @@
-# Release v1.0.3 (2025-05-20)
+# Release v1.0.4 (2025-05-20)
 
-- modif ssh (9624696)
+- modif inventory (c7df0f9)
