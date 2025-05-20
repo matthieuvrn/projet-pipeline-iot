@@ -41,10 +41,20 @@ jobs:
         echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
         chmod 600 ~/.ssh/id_rsa
         ssh-keyscan -H ${{ secrets.VM_HOST }} >> ~/.ssh/known_hosts
+        # Créer également un lien symbolique dans /root/.ssh si nécessaire
+        sudo mkdir -p /root/.ssh
+        sudo cp ~/.ssh/id_rsa /root/.ssh/
+        sudo chmod 600 /root/.ssh/id_rsa
+        sudo cp ~/.ssh/known_hosts /root/.ssh/ || true
       
     - name: Update Ansible inventory
       run: |
-        sed -i "s/IP_PUBLIQUE_VM/${{ secrets.VM_HOST }}/g" ansible/inventory.ini
+        # Utiliser un chemin absolu et visible pour la clé SSH
+        echo '[webservers]
+        iot-sensors-vm ansible_host=${{ secrets.VM_HOST }} ansible_user=adminuser ansible_ssh_private_key_file=~/.ssh/id_rsa
+
+        [all:vars]
+        ansible_python_interpreter=/usr/bin/python3' > ansible/inventory.ini
     
     - name: Auto-commit all changes before deployment
       run: |
@@ -60,7 +70,7 @@ jobs:
         #!/bin/bash
         set -e
         echo "🔄 Déploiement avec Ansible..."
-        ansible-playbook -i ansible/inventory.ini ansible/deploy.yml
+        ansible-playbook -i ansible/inventory.ini ansible/deploy.yml -vvv
         echo "✅ Déploiement terminé avec succès !"
         EOF
         chmod +x deploy-ci.sh
