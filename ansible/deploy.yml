@@ -51,22 +51,25 @@
         path: "{{ app_dir }}/.git"
       register: git_repo_stat
 
-    - name: Clone repository if it doesn't exist
-      git:
-        repo: "{{ github_repo }}"
-        dest: "{{ app_dir }}"
-        version: "{{ repo_branch }}"
-      when: not git_repo_stat.stat.exists
-      become_user: adminuser
-
-    - name: Update repository if it exists
-      git:
-        repo: "{{ github_repo }}"
-        dest: "{{ app_dir }}"
-        version: "{{ repo_branch }}"
-        update: yes
-        force: yes
+    - name: Remove existing repository if it exists
+      file:
+        path: "{{ app_dir }}"
+        state: absent
       when: git_repo_stat.stat.exists
+
+    - name: Create app directory
+      file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: adminuser
+        group: adminuser
+        mode: '0755'
+
+    - name: Clone repository
+      git:
+        repo: "{{ github_repo }}"
+        dest: "{{ app_dir }}"
+        version: "{{ repo_branch }}"
       become_user: adminuser
 
     - name: Install Node.js dependencies
