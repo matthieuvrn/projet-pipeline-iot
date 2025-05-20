@@ -1,3 +1,3 @@
-# Release v1.0.15 (2025-05-20)
+# Release v1.0.16 (2025-05-20)
 
-- Restructuration complète du processus de déploiement pour GitHub Actions (8117604)
+- Corriger les problèmes de clé SSH dans GitHub Actions (30f6664)
