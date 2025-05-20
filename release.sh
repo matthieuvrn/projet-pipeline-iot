@@ -29,7 +29,21 @@ fi
 
 # Générer le changelog
 echo "📝 Génération du changelog..."
-COMMITS=$(git log --pretty=format:"- %s (%h)" $(git describe --tags --abbrev=0 2>/dev/null || echo HEAD~10)..HEAD)
+# Récupérer les commits de manière plus robuste
+if git rev-parse --verify HEAD >/dev/null 2>&1; then
+  # Si nous avons au moins un commit
+  if git describe --tags --abbrev=0 >/dev/null 2>&1; then
+    # Si nous avons au moins un tag
+    LAST_TAG=$(git describe --tags --abbrev=0)
+    COMMITS=$(git log --pretty=format:"- %s (%h)" ${LAST_TAG}..HEAD)
+  else
+    # Si nous n'avons pas de tag, prendre tous les commits
+    COMMITS=$(git log --pretty=format:"- %s (%h)")
+  fi
+else
+  # Si nous n'avons pas de commit du tout
+  COMMITS="- Premier déploiement"
+fi
 CHANGELOG="# Release $TAG ($(date +"%Y-%m-%d"))\n\n$COMMITS"
 echo -e "$CHANGELOG" > CHANGELOG.md
 cat CHANGELOG.md
