@@ -1,0 +1,109 @@
+---
+- name: Deploy IoT Sensors API
+  hosts: webservers
+  become: yes
+  vars:
+    app_dir: /home/adminuser/iot-sensors-api
+    api_port: 3000
+    node_version: "16.x"
+    github_repo: "https://github.com/VOTRE_NOM_UTILISATEUR/projet-pipeline-iot.git"
+    repo_branch: "main"
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install required packages
+      apt:
+        name:
+          - git
+          - curl
+          - build-essential
+        state: present
+
+    - name: Install Node.js repository
+      shell: |
+        curl -fsSL https://deb.nodesource.com/setup_{{ node_version }} | sudo -E bash -
+      args:
+        warn: false
+
+    - name: Install Node.js
+      apt:
+        name: nodejs
+        state: present
+
+    - name: Install PM2 globally
+      npm:
+        name: pm2
+        global: yes
+        state: present
+
+    - name: Create app directory if it doesn't exist
+      file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: adminuser
+        group: adminuser
+        mode: '0755'
+
+    - name: Check if repository exists
+      stat:
+        path: "{{ app_dir }}/.git"
+      register: git_repo_stat
+
+    - name: Clone repository if it doesn't exist
+      git:
+        repo: "{{ github_repo }}"
+        dest: "{{ app_dir }}"
+        version: "{{ repo_branch }}"
+      when: not git_repo_stat.stat.exists
+      become_user: adminuser
+
+    - name: Update repository if it exists
+      git:
+        repo: "{{ github_repo }}"
+        dest: "{{ app_dir }}"
+        version: "{{ repo_branch }}"
+        update: yes
+      when: git_repo_stat.stat.exists
+      become_user: adminuser
+
+    - name: Install Node.js dependencies
+      npm:
+        path: "{{ app_dir }}/api"
+        state: present
+      become_user: adminuser
+
+    - name: Check if app is running with PM2
+      shell: pm2 list | grep "sensors-api" | wc -l
+      register: app_running
+      ignore_errors: yes
+      become_user: adminuser
+      changed_when: false
+
+    - name: Start app with PM2 if not running
+      shell: cd {{ app_dir }}/api && pm2 start server.js --name="sensors-api"
+      become_user: adminuser
+      when: app_running.stdout == "0"
+
+    - name: Restart app with PM2 if already running
+      shell: cd {{ app_dir }}/api && pm2 restart sensors-api
+      become_user: adminuser
+      when: app_running.stdout != "0"
+
+    - name: Save PM2 config
+      shell: pm2 save
+      become_user: adminuser
+      changed_when: false
+
+    - name: Setup PM2 to start on boot
+      shell: pm2 startup | tail -n 1
+      register: pm2_startup_cmd
+      become_user: adminuser
+      changed_when: false
+
+    - name: Run PM2 startup command
+      shell: "{{ pm2_startup_cmd.stdout }}"
+      when: pm2_startup_cmd.stdout != ""
