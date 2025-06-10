@@ -402,8 +402,6 @@ Collecte et agrégation de logs centralisée :
 - **Email** : Escalade pour alertes critiques
 - **PagerDuty** : Astreinte 24/7 production
 
-**📖 [Documentation monitoring complète →](docs/monitoring.md)**
-
 ## 💾 Snapshots et sauvegarde
 
 ### Stratégie de sauvegarde
@@ -522,8 +520,6 @@ Combinaison application + infrastructure pour un retour total.
 | Base de données | < 10 minutes | < 1 heure |
 | Rollback complet | < 20 minutes | < 24 heures |
 
-**📖 [Documentation rollback complète →](docs/rollback.md)**
-
 ## 🚀 Installation et déploiement
 
 ### Prérequis
@@ -613,133 +609,3 @@ ansible-playbook -i inventories/production/hosts deploy.yml
 # 3. Vérifier le déploiement
 curl https://iot-api.example.com/health
 ```
-
-**📖 [Guide de déploiement détaillé →](docs/deployment.md)**
-
-## 📸 Captures d'écran
-
-### Pipeline CI/CD en action
-
-![Pipeline CI/CD](docs/images/pipeline-cicd.png)
-*Pipeline complet avec toutes les étapes : lint, test, build, deploy, snapshot*
-
-### Environnements déployés
-
-#### Interface Staging
-![Staging Environment](docs/images/staging-deployed.png)
-*API IoT déployée en staging avec dashboard de monitoring*
-
-#### Interface Production  
-![Production Environment](docs/images/production-deployed.png)
-*API IoT en production avec load balancer et haute disponibilité*
-
-### Gestion Git et versions
-
-#### Branches GitFlow
-![Git Branches](docs/images/git-branches.png)
-*Structure des branches avec GitFlow : main, develop, features, releases*
-
-#### Historique des commits
-![Commit History](docs/images/commit-history.png)
-*Historique structuré avec Conventional Commits et merges*
-
-#### Tags et versions
-![Git Tags](docs/images/git-tags.png)
-*Versionnement sémantique avec tags automatiques*
-
-### Monitoring et observabilité
-
-#### Dashboard Grafana principal
-![Grafana Dashboard](docs/images/grafana-dashboard.png)
-*Vue d'ensemble : métriques API, infrastructure et business*
-
-#### Logs centralisés avec Loki
-![Loki Logs](docs/images/loki-logs.png)
-*Agrégation des logs application, système et conteneurs*
-
-#### Alertes Prometheus
-![Prometheus Alerts](docs/images/prometheus-alerts.png)
-*Configuration et état des alertes de monitoring*
-
-### Snapshots et rollback
-
-#### Planification des snapshots
-![Snapshot Schedule](docs/images/snapshot-schedule.png)
-*Snapshots automatiques quotidiens avec rétention 30 jours*
-
-#### Procédure de rollback
-![Rollback Procedure](docs/images/rollback-execution.png)
-*Exécution d'un rollback complet avec restauration de snapshot*
-
-#### État après restauration
-![Post Rollback](docs/images/post-rollback-state.png)
-*Vérification de l'état après rollback réussi*
-
-## 🤝 Contribution
-
-### Workflow de contribution
-
-1. **Fork** du repository
-2. **Créer** une branche feature depuis develop
-3. **Développer** avec tests et documentation
-4. **Tester** localement et valider les pipelines
-5. **Créer** une Pull Request vers develop
-6. **Review** par l'équipe
-7. **Merge** après validation
-
-### Standards de qualité
-
-- ✅ **Tests** : Coverage > 80%
-- ✅ **Documentation** : README et commentaires à jour
-- ✅ **Conventions** : Conventional Commits + ESLint
-- ✅ **Sécurité** : Pas de secrets exposés, audit Snyk OK
-- ✅ **Performance** : Pas de régression détectée
-
-### Outils de développement
-
-```bash
-# Setup des hooks de pré-commit
-npm install -g @commitlint/cli @commitlint/config-conventional
-echo "module.exports = {extends: ['@commitlint/config-conventional']}" > commitlint.config.js
-
-# Linting local
-npm run lint
-npm run format
-
-# Tests locaux
-npm run test
-npm run test:coverage
-```
-
----
-
-## 📞 Support et documentation
-
-### Liens utiles
-
-- 📖 **Documentation** : [docs/](docs/)
-- 🐛 **Issues** : [GitHub Issues](https://github.com/username/iot-api-cicd/issues)
-- 💬 **Discussions** : [GitHub Discussions](https://github.com/username/iot-api-cicd/discussions)
-- 📊 **Monitoring** : [Grafana Dashboard](https://grafana.monitoring.example.com)
-- 🚨 **Status Page** : [status.example.com](https://status.example.com)
-
-### Équipe DevOps
-
-- **Lead DevOps** : [@username](https://github.com/username)
-- **SRE** : [@username2](https://github.com/username2)  
-- **Security** : [@username3](https://github.com/username3)
-
-### Licence
-
-Ce projet est sous licence MIT. Voir [LICENSE](LICENSE) pour plus de détails.
-
----
-
-<div align="center">
-
-**🌟 Si ce projet vous aide, n'hésitez pas à lui donner une étoile ! 🌟**
-
-[![GitHub stars](https://img.shields.io/github/stars/username/iot-api-cicd.svg?style=social&label=Star)](https://github.com/username/iot-api-cicd)
-[![GitHub forks](https://img.shields.io/github/forks/username/iot-api-cicd.svg?style=social&label=Fork)](https://github.com/username/iot-api-cicd/fork)
-
-</div>
