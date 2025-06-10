@@ -402,14 +402,6 @@ Collecte et agrégation de logs centralisée :
 - **Email** : Escalade pour alertes critiques
 - **PagerDuty** : Astreinte 24/7 production
 
-### Liens de monitoring
-
-| Service | URL | Description |
-|---------|-----|-------------|
-| Grafana | [grafana.monitoring.example.com](https://grafana.monitoring.example.com) | Dashboards et alertes |
-| Prometheus | [prometheus.monitoring.example.com](https://prometheus.monitoring.example.com) | Métriques brutes |
-| AlertManager | [alerts.monitoring.example.com](https://alerts.monitoring.example.com) | Gestion alertes |
-
 **📖 [Documentation monitoring complète →](docs/monitoring.md)**
 
 ## 💾 Snapshots et sauvegarde
