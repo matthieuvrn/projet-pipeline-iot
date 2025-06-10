@@ -1,0 +1,340 @@
+name: Rollback Procedure
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to rollback'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      target_version:
+        description: 'Target version to rollback to (e.g., v1.2.3)'
+        required: true
+        type: string
+      rollback_type:
+        description: 'Type of rollback'
+        required: true
+        type: choice
+        options:
+          - application
+          - infrastructure
+          - full
+      confirm_rollback:
+        description: 'Type "CONFIRM" to proceed with rollback'
+        required: true
+        type: string
+
+env:
+  AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+  AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+
+jobs:
+  validate-rollback:
+    name: Validate Rollback Request
+    runs-on: ubuntu-latest
+    outputs:
+      can-proceed: ${{ steps.validate.outputs.can_proceed }}
+    steps:
+      - name: Validate confirmation
+        id: validate
+        run: |
+          if [ "${{ github.event.inputs.confirm_rollback }}" != "CONFIRM" ]; then
+            echo "❌ Rollback not confirmed. Please type 'CONFIRM' to proceed."
+            exit 1
+          fi
+          
+          if [ -z "${{ github.event.inputs.target_version }}" ]; then
+            echo "❌ Target version is required"
+            exit 1
+          fi
+          
+          echo "✅ Rollback validation passed"
+          echo "can_proceed=true" >> $GITHUB_OUTPUT
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify target version exists
+        run: |
+          if ! git tag -l | grep -q "^${{ github.event.inputs.target_version }}$"; then
+            echo "❌ Target version ${{ github.event.inputs.target_version }} does not exist"
+            exit 1
+          fi
+          echo "✅ Target version ${{ github.event.inputs.target_version }} found"
+
+  backup-current-state:
+    name: Backup Current State
+    runs-on: ubuntu-latest
+    needs: validate-rollback
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create pre-rollback snapshot
+        working-directory: ./snapshots/scripts
+        run: |
+          chmod +x ./create-snapshot.sh
+          timestamp=$(date +%Y%m%d-%H%M%S)
+          ./create-snapshot.sh ${{ github.event.inputs.environment }} "pre-rollback-${timestamp}"
+
+      - name: Export current application state
+        working-directory: ./rollback/scripts
+        run: |
+          chmod +x ./backup-state.sh
+          ./backup-state.sh ${{ github.event.inputs.environment }}
+
+      - name: Store backup artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pre-rollback-backup-${{ github.event.inputs.environment }}
+          path: |
+            ./rollback/backups/
+          retention-days: 30
+
+  rollback-application:
+    name: Rollback Application
+    runs-on: ubuntu-latest
+    needs: [validate-rollback, backup-current-state]
+    if: contains(github.event.inputs.rollback_type, 'application') || contains(github.event.inputs.rollback_type, 'full')
+    environment:
+      name: ${{ github.event.inputs.environment }}
+    steps:
+      - name: Checkout target version
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.target_version }}
+
+      - name: Setup Docker
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get target image tag
+        id: image
+        run: |
+          # Récupérer l'image correspondant à la version cible
+          IMAGE_TAG="ghcr.io/${{ github.repository }}/iot-api:${{ github.event.inputs.target_version }}"
+          echo "target_image=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+
+      - name: Verify target image exists
+        run: |
+          docker manifest inspect ${{ steps.image.outputs.target_image }} || {
+            echo "❌ Target image ${{ steps.image.outputs.target_image }} not found"
+            exit 1
+          }
+
+      - name: Setup Ansible
+        run: |
+          pip install ansible ansible-collections
+          ansible-galaxy collection install azure.azcollection
+
+      - name: Rollback application with Ansible
+        working-directory: ./ansible
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: false
+        run: |
+          ansible-playbook -i inventories/${{ github.event.inputs.environment }}/hosts rollback.yml \
+            --extra-vars "target_image=${{ steps.image.outputs.target_image }}" \
+            --extra-vars "target_version=${{ github.event.inputs.target_version }}" \
+            --extra-vars "environment=${{ github.event.inputs.environment }}"
+
+  rollback-infrastructure:
+    name: Rollback Infrastructure
+    runs-on: ubuntu-latest
+    needs: [validate-rollback, backup-current-state]
+    if: contains(github.event.inputs.rollback_type, 'infrastructure') || contains(github.event.inputs.rollback_type, 'full')
+    environment:
+      name: ${{ github.event.inputs.environment }}
+    steps:
+      - name: Checkout target version
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.target_version }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+
+      - name: Restore infrastructure snapshot
+        working-directory: ./snapshots/scripts
+        run: |
+          chmod +x ./restore-snapshot.sh
+          ./restore-snapshot.sh ${{ github.event.inputs.environment }} ${{ github.event.inputs.target_version }}
+
+      - name: Terraform Init
+        working-directory: ./terraform/environments/${{ github.event.inputs.environment }}
+        run: terraform init
+
+      - name: Terraform Plan - Rollback
+        working-directory: ./terraform/environments/${{ github.event.inputs.environment }}
+        run: |
+          terraform plan -out=rollback.tfplan
+          terraform show -no-color rollback.tfplan
+
+      - name: Terraform Apply - Rollback
+        working-directory: ./terraform/environments/${{ github.event.inputs.environment }}
+        run: terraform apply -auto-approve rollback.tfplan
+
+  verify-rollback:
+    name: Verify Rollback
+    runs-on: ubuntu-latest
+    needs: [rollback-application, rollback-infrastructure]
+    if: always() && (needs.rollback-application.result == 'success' || needs.rollback-infrastructure.result == 'success')
+    steps:
+      - name: Checkout target version
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.target_version }}
+
+      - name: Wait for services to stabilize
+        run: sleep 60
+
+      - name: Health check
+        run: |
+          if [ "${{ github.event.inputs.environment }}" == "staging" ]; then
+            API_URL="https://iot-api-staging.example.com"
+          else
+            API_URL="https://iot-api.example.com"
+          fi
+          
+          echo "Checking health at: $API_URL/health"
+          
+          # Retry health check up to 5 times
+          for i in {1..5}; do
+            if curl -f "$API_URL/health"; then
+              echo "✅ Health check passed"
+              break
+            else
+              echo "⚠️ Health check failed, attempt $i/5"
+              if [ $i -eq 5 ]; then
+                echo "❌ Health check failed after 5 attempts"
+                exit 1
+              fi
+              sleep 30
+            fi
+          done
+
+      - name: Verify application version
+        run: |
+          if [ "${{ github.event.inputs.environment }}" == "staging" ]; then
+            API_URL="https://iot-api-staging.example.com"
+          else
+            API_URL="https://iot-api.example.com"
+          fi
+          
+          VERSION=$(curl -s "$API_URL/version" | jq -r '.version')
+          if [ "$VERSION" != "${{ github.event.inputs.target_version }}" ]; then
+            echo "❌ Version mismatch. Expected: ${{ github.event.inputs.target_version }}, Got: $VERSION"
+            exit 1
+          fi
+          echo "✅ Application version verified: $VERSION"
+
+      - name: Run smoke tests
+        working-directory: ./api
+        env:
+          API_URL: ${{ github.event.inputs.environment == 'staging' && 'https://iot-api-staging.example.com' || 'https://iot-api.example.com' }}
+        run: |
+          npm ci
+          npm run test:smoke
+
+  notify-rollback:
+    name: Notify Rollback Status
+    runs-on: ubuntu-latest
+    needs: [rollback-application, rollback-infrastructure, verify-rollback]
+    if: always()
+    steps:
+      - name: Determine rollback status
+        id: status
+        run: |
+          if [ "${{ needs.verify-rollback.result }}" == "success" ]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "message=✅ Rollback completed successfully" >> $GITHUB_OUTPUT
+          else
+            echo "status=failure" >> $GITHUB_OUTPUT
+            echo "message=❌ Rollback failed - manual intervention required" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Notify Slack
+        uses: 8398a7/action-slack@v3
+        with:
+          status: custom
+          custom_payload: |
+            {
+              "text": "${{ steps.status.outputs.message }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Rollback Operation Complete*"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Environment:* ${{ github.event.inputs.environment }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Target Version:* ${{ github.event.inputs.target_version }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Rollback Type:* ${{ github.event.inputs.rollback_type }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Status:* ${{ steps.status.outputs.status }}"
+                    }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Create rollback report
+        run: |
+          cat > rollback-report.md << EOF
+          # Rollback Report
+          
+          **Date:** $(date)
+          **Environment:** ${{ github.event.inputs.environment }}
+          **Target Version:** ${{ github.event.inputs.target_version }}
+          **Rollback Type:** ${{ github.event.inputs.rollback_type }}
+          **Status:** ${{ steps.status.outputs.status }}
+          **Initiated by:** ${{ github.actor }}
+          
+          ## Results
+          - Application Rollback: ${{ needs.rollback-application.result || 'skipped' }}
+          - Infrastructure Rollback: ${{ needs.rollback-infrastructure.result || 'skipped' }}
+          - Verification: ${{ needs.verify-rollback.result }}
+          
+          ## Actions Taken
+          - Pre-rollback snapshot created
+          - Current state backed up
+          - Application/Infrastructure rolled back to target version
+          - Health checks and smoke tests executed
+          
+          EOF
+
+      - name: Store rollback report
+        uses: actions/upload-artifact@v4
+        with:
+          name: rollback-report-${{ github.event.inputs.environment }}-${{ github.run_number }}
+          path: rollback-report.md
